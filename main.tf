@@ -8,11 +8,11 @@ resource "kubernetes_namespace" "ns_development" {
   }
 }
 
-resource "kubernetes_deployment" "gogs-postgres" {
+resource "kubernetes_deployment" "gogs-mysql" {
   metadata {
-    name = "gogs-postgres"
+    name = "gogs-mysql"
     labels = {
-      app = "gogs-postgres"
+      app = "gogs-mysql"
     }
   }
 
@@ -21,48 +21,42 @@ resource "kubernetes_deployment" "gogs-postgres" {
 
     selector {
       match_labels = {
-        app = "gogs-postgres"
+        app = "gogs-mysql"
       }
     }
 
     template {
       metadata {
         labels = {
-          app = "gogs-postgres"
+          app = "gogs-mysql"
         }
       }
 
       spec {
         container {
-          image = "postgres:9.5"
-          name  = "gogs-postgres"
+          image = "mysql:5.7"
+          name  = "gogs-mysql"
 
           port {
-            container_port = 5432
-          }
-
-          env {
-            name = "POSTGRES_USER"
-            value = "gogs"
+            container_port = 3306
           }
           env {
-            name = "POSTGRES_PASSWORD"
+            name = "MYSQL_ROOT_PASSWORD"
             value = "123456"
           }
           env {
-            name = "POSTGRES_DB"
+            name = "MYSQL_DATABASE"
             value = "gogs"
           }
           volume_mount {
-            mount_path = "/var/lib/postgresql/data"
-            name = "gogs-postgres-volume"
+            mount_path = "/var/lib/mysql"
+            name = "gogs-mysql-volume"
           }
         }
         volume {
-            name = "gogs-postgres-volume"
+            name = "gogs-mysql-volume"
             persistent_volume_claim {
-              #claim_name = "${kubernetes_persistent_volume_claim.pvc_gogs-postgres.metadata.0.name}"
-              claim_name = "pvc-gogs-postgres"
+              claim_name = "${kubernetes_persistent_volume_claim.pvc_gogs-mysql.metadata.0.name}"
             }
           }
       }
@@ -70,37 +64,169 @@ resource "kubernetes_deployment" "gogs-postgres" {
   }
 }
 
-
-resource "kubernetes_persistent_volume_claim" "pvc_gogs-postgres" {
+resource "kubernetes_deployment" "gogs" {
   metadata {
-    name = "pvc-gogs-postgres"
+    name = "gogs"
+    labels = {
+      app = "gogs"
+    }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "gogs"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "gogs"
+        }
+      }
+
+      spec {
+        container {
+          image = "gogs/gogs:latest"
+          name  = "gogs"
+
+          port {
+            container_port = 22
+          }
+          port {
+            container_port = 3000
+          }
+          env {
+            name = "RUN_CROND"
+            value = "true"
+          }
+          volume_mount {
+            mount_path = "/data"
+            name = "gogs-volume"
+          }
+        }
+        volume {
+            name = "gogs-volume"
+            persistent_volume_claim {
+              claim_name = "${kubernetes_persistent_volume_claim.pvc_gogs.metadata.0.name}"
+            }
+          }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "svc_gogs" {
+  metadata {
+    name = "gogs"
+  }
+  spec {
+    selector = {
+      app = "gogs"
+    }
+    
+    port {
+      name        = "web-ui"
+      port        = 3000
+      target_port = 3000
+      node_port   = 32500
+    }
+
+    port {
+      name        = "ssh-access"
+      port        = 10022
+      target_port = 22
+      node_port   = 32501
+    }
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_service" "svc_gogs-mysql" {
+  metadata {
+    name = "gogs-mysql"
+  }
+  spec {
+    selector = {
+      app = "gogs-mysql"
+    }
+    
+    port {
+      name        = "web-ui"
+      port        = 3306
+    }
+    type = "ClusterIP"
+  }
+}
+resource "kubernetes_persistent_volume_claim" "pvc_gogs-mysql" {
+  metadata {
+    name = "pvc-gogs-mysql"
   }
   spec {
     access_modes = ["ReadWriteOnce"]
+    storage_class_name = "hostpath"
     resources {
       requests = {
         storage = "2Gi"
       }
     }
-    #volume_name = "${kubernetes_persistent_volume.pv_gogs-postgres.metadata.0.name}"
+    volume_name = "${kubernetes_persistent_volume.pv_gogs-mysql.metadata.0.name}"
   }
 }
 
-# resource "kubernetes_persistent_volume" "pv_gogs-postgres" {
-#   metadata {
-#     name = "pv-gogs-postgres"
-#   }
-#   spec {
-#     capacity = {
-#       storage = "5Gi"
-#     }
-#     persistent_volume_reclaim_policy = "Retain"
-#     access_modes = ["ReadWriteOnce"]
-#     storage_class
-#     persistent_volume_source {
-#       host_path  {
-#         path  = "/mnt/gogs-postgres"
-#       }
-#     }
-#   }
-# }
+resource "kubernetes_persistent_volume" "pv_gogs-mysql" {
+  metadata {
+    name = "pv-gogs-mysql"
+   }
+  spec {
+    capacity = {
+      storage = "5Gi"
+    }
+    persistent_volume_reclaim_policy = "Retain"
+    access_modes = ["ReadWriteOnce"]
+    storage_class_name = "hostpath"
+    persistent_volume_source {
+      host_path  {
+        path  = "/host_mnt/c/Users/Ahmet_Erkoc/.docker/Volumes/gogs-mysql"
+      }
+    }
+  }
+}
+
+resource "kubernetes_persistent_volume_claim" "pvc_gogs" {
+  metadata {
+    name = "pvc-gogs"
+  }
+  spec {
+    access_modes = ["ReadWriteOnce"]
+    storage_class_name = "hostpath"
+    resources {
+      requests = {
+        storage = "2Gi"
+      }
+    }
+    volume_name = "${kubernetes_persistent_volume.pv_gogs.metadata.0.name}"
+  }
+}
+
+resource "kubernetes_persistent_volume" "pv_gogs" {
+  metadata {
+    name = "pv-gogs"
+   }
+  spec {
+    capacity = {
+      storage = "5Gi"
+    }
+    persistent_volume_reclaim_policy = "Retain"
+    access_modes = ["ReadWriteOnce"]
+    storage_class_name = "hostpath"
+    persistent_volume_source {
+      host_path  {
+        path  = "/host_mnt/c/Users/Ahmet_Erkoc/.docker/Volumes/gogs"
+      }
+    }
+  }
+}
