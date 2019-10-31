@@ -89,6 +89,15 @@ resource "kubernetes_deployment" "gogs" {
       }
 
       spec {
+        # init_container {
+        #   name = "config-data"
+        #   image = "busybox"
+        #   command = ["sh", "-c", "chmod 600 -R /data/ssh"]
+        #   volume_mount {
+        #     mount_path = "/data"
+        #     name = "gogs-volume"
+        #   }
+        # }
         container {
           image = "gogs/gogs:latest"
           name  = "gogs"
@@ -110,8 +119,8 @@ resource "kubernetes_deployment" "gogs" {
         }
         volume {
             name = "gogs-volume"
-            persistent_volume_claim {
-              claim_name = "${kubernetes_persistent_volume_claim.pvc_gogs.metadata.0.name}"
+            host_path {
+              path = "/host_mnt/c/Users/Ahmet_Erkoc/.docker/Volumes/gogs-local"
             }
           }
       }
