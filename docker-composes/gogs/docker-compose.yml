@@ -1,0 +1,29 @@
+version: '3'
+services:
+    postgres:
+      image: postgres:9.5
+      environment:
+       - "POSTGRES_USER=gogs"
+       - "POSTGRES_PASSWORD=123456"
+       - "POSTGRES_DB=gogs"
+      volumes:
+       - "db-data:/var/lib/postgresql/data"
+    gogs:
+      image: gogs/gogs:latest
+      ports:
+       - "10022:22"
+       - "3000:3000"
+      links:
+       - postgres
+      environment:
+       - "RUN_CROND=true"
+      volumes:
+       - "gogs-data:/data"
+      depends_on:
+       - postgres
+
+volumes:
+    db-data:
+      driver: local
+    gogs-data:
+      driver: local
